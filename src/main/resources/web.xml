@@ -1,0 +1,10 @@
+<web-app xmlns="http://java.sun.com/xml/ns/javaee" version="2.5">
+    <servlet>
+        <servlet-name>wordcount</servlet-name>
+        <servlet-class>edu.uw.cldaws.WordCountServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>wordcount</servlet-name>
+        <url-pattern>/*</url-pattern>
+    </servlet-mapping>
+</web-app>
