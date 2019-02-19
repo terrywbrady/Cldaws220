@@ -2,11 +2,19 @@ package edu.uw.cldaws;
 
 import java.io.IOException;
 
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.amazonaws.services.lambda.runtime.events.SQSEvent;
+import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class WordCount {
@@ -15,43 +23,40 @@ public class WordCount {
     private WordCountCache wcCache = new WordCountCache();
     private WordCountQueue wcQueue = new WordCountQueue();
 
-    public static void main(String[] args) {
-        WordCount wc = new WordCount();
+    public static void main(String[] args) throws IOException {
+        //WordCount wc = new WordCount();
         long start = new Date().getTime();
         long lastReport = new Date().getTime();
-        try {
-            while(true) {
-                wc.processQueue();
-                TimeUnit.SECONDS.sleep(1);
-                lastReport = wc.reportStatus(start, lastReport);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        System.out.println(returnJsonMessage(200,"foo"));
     }
     
+    public String myWebHandler(LinkedHashMap map, Context context) throws IOException {
+        LambdaLogger logger = context.getLogger();
+        logger.log("received : " + map.toString());
+        String url = map.containsKey("url") ? map.get("url").toString() : "";
+        return checkUrl(url);
+    }
+
     public WordCount() {
     }
    
     public String checkUrl(String url) throws IOException {
         if (url == null) {
-            return returnJsonMessage("'url' parameter must be provided");
+            return returnJsonMessage(500, "'url' parameter must be provided");
         }
         if (url.isEmpty()) {
-            return returnJsonMessage("'url' parameter must be provided");
+            return returnJsonMessage(500, "'url' parameter must be provided");
         }
         String result = wcCache.checkCacheVal(url);
         
         if (result == null) {
             if (wcQueue.queueRequest(url)) {
-                return returnJsonMessage("Not in cache. Request queued. Try again later.");
+                return returnJsonMessage(200, "Not in cache. Request queued. Try again later.");
             } else {
-                return returnJsonMessage("Not in cache. Request could not be queued.");
+                return returnJsonMessage(200, "Not in cache. Request could not be queued.");
             }
         }
-        return result;
+        return returnJsonMessage(200, result);
     }
 
     public long reportStatus(long start, long lastReport) {
@@ -65,8 +70,26 @@ public class WordCount {
         return lastReport;
     }
     
+    
+    public Void handleRequest(SQSEvent event, Context context)
+    {
+        LambdaLogger logger = context.getLogger();
+
+        ArrayList<WordCountMessage> mlist = new ArrayList<>();
+        for(SQSMessage msg : event.getRecords()){
+            WordCountMessage wcm = new WordCountMessage(msg);
+            logger.log(String.format("%s -- %s", wcm.getUrl(), wcm.getReceipt()));
+            mlist.add(wcm);
+        }
+        return null;
+    }
+    
+
     public boolean processQueue() throws IOException {
-        List<WordCountMessage> mlist = wcQueue.getMessage();
+        return processMessageList(wcQueue.getMessage());
+    }
+    
+    public boolean processMessageList(List<WordCountMessage> mlist) throws IOException {
         if (mlist.isEmpty()) {
             return false;
         } else {
@@ -85,10 +108,21 @@ public class WordCount {
         return true;
     }
    
-    public static String returnJsonMessage(String s) {
-        HashMap<String,String> map = new HashMap<>();
-        map.put("message", s);
-        return new Gson().toJson(map);
+    
+    public static class LambdaResponse {
+        int statusCode;
+        Map<String,String> headers = new HashMap<>();
+        String body;
+        
+        LambdaResponse(int statusCode, String body) {
+            this.statusCode = statusCode;
+            this.body = body;
+            headers.put("Content-Type", "application/json");
+        }
+    }
+    
+    public static String returnJsonMessage(int status, String s) {
+        return new Gson().toJson(new LambdaResponse(status, s));
     }
     
 }
