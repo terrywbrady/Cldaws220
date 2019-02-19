@@ -1,6 +1,7 @@
 package edu.uw.cldaws;
 
 import software.amazon.awssdk.services.sqs.model.Message;
+import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage;
 
 public class WordCountMessage {
     private String url;
@@ -8,6 +9,10 @@ public class WordCountMessage {
     public WordCountMessage(Message m) {
         putUrl(m.body());
         putReceipt(m.receiptHandle());
+    }
+    public WordCountMessage(SQSMessage m) {
+        putUrl(m.getBody());
+        putReceipt(m.getReceiptHandle());
     }
     public String getUrl() {
         return url;
