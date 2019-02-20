@@ -38,7 +38,7 @@ public class WordCountParser {
         try {
             setUrl(url);
         } catch (IOException e) {
-            return WordCount.returnJsonMessage(500, e.getMessage());
+            return e.getMessage();
         }
         Collection<String> results = getTopKeys(COUNT);
         String result = new Gson().toJson(results);

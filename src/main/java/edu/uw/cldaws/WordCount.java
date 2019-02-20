@@ -7,7 +7,11 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -30,17 +34,30 @@ public class WordCount {
         System.out.println(returnJsonMessage(200,"foo"));
     }
     
-    public String myWebHandler(LinkedHashMap map, Context context) throws IOException {
+    public LambdaResponse myWebHandler(LinkedHashMap map, Context context) throws IOException {
         LambdaLogger logger = context.getLogger();
         logger.log("received : " + map.toString());
-        String url = map.containsKey("url") ? map.get("url").toString() : "";
-        return checkUrl(url);
+        logger.log("context : " + context.toString());
+        String url = "";
+        if (map.containsKey("url")) {
+            url = map.get("url").toString();
+        } else if (map.containsKey("queryStringParameters")) {
+            Map qsp = (Map)map.get("queryStringParameters");
+            if (qsp.containsKey("url")) {
+                url = qsp.get("url").toString();
+            }
+        }
+        logger.log("url : " + url);
+        LambdaResponse resp = checkUrl(url);
+        String respstr = resp.asJsonString();
+        logger.log("resp: "+respstr);
+        return resp;
     }
 
     public WordCount() {
     }
    
-    public String checkUrl(String url) throws IOException {
+    public LambdaResponse checkUrl(String url) throws IOException {
         if (url == null) {
             return returnJsonMessage(500, "'url' parameter must be provided");
         }
@@ -56,7 +73,9 @@ public class WordCount {
                 return returnJsonMessage(200, "Not in cache. Request could not be queued.");
             }
         }
-        return returnJsonMessage(200, result);
+        JsonParser parser = new JsonParser();
+        JsonArray o = parser.parse(result).getAsJsonArray();
+        return returnJsonMessage(200, o);
     }
 
     public long reportStatus(long start, long lastReport) {
@@ -71,7 +90,7 @@ public class WordCount {
     }
     
     
-    public Void handleRequest(SQSEvent event, Context context)
+    public Void handleRequest(SQSEvent event, Context context) throws IOException
     {
         LambdaLogger logger = context.getLogger();
 
@@ -81,6 +100,7 @@ public class WordCount {
             logger.log(String.format("%s -- %s", wcm.getUrl(), wcm.getReceipt()));
             mlist.add(wcm);
         }
+        processMessageList(mlist);
         return null;
     }
     
@@ -112,17 +132,30 @@ public class WordCount {
     public static class LambdaResponse {
         int statusCode;
         Map<String,String> headers = new HashMap<>();
-        String body;
+        Object body;
+        private Gson g = new GsonBuilder().create();
+
+        public int getStatusCode() {
+            return statusCode;
+        }
         
-        LambdaResponse(int statusCode, String body) {
+        public String getBody() {
+            return g.toJson(body);
+        }
+        
+        LambdaResponse(int statusCode, Object body) {
             this.statusCode = statusCode;
             this.body = body;
             headers.put("Content-Type", "application/json");
         }
+        
+        public String asJsonString() {
+            return g.toJson(body);
+        }
     }
     
-    public static String returnJsonMessage(int status, String s) {
-        return new Gson().toJson(new LambdaResponse(status, s));
+    public static LambdaResponse returnJsonMessage(int status, Object s) {
+        LambdaResponse r = new LambdaResponse(status, s);
+        return r;
     }
-    
 }
