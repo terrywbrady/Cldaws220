@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  MyTableName:
+    Description: The name of the table
+    Type: String
+Resources:
+  MyDynamoDB:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      -
+        AttributeName: "url"
+        AttributeType: "S"
+      KeySchema:
+      -
+        AttributeName: "url"
+        KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "10"
+        WriteCapacityUnits: "10"
+      TableName: !Ref MyTableName
+Outputs:
+  TableName:
+    Description: Name of the newly created table
+    Value: !Ref MyDynamoDB
