@@ -34,12 +34,8 @@ public class WordCountParser {
     }
 
     //Week 1 - allow count param, disregard as we test caching
-    public String getCountAsJson(String url) {
-        try {
-            setUrl(url);
-        } catch (IOException e) {
-            return e.getMessage();
-        }
+    public String getCountAsJson(String url) throws IOException {
+        setUrl(url);
         Collection<String> results = getTopKeys(COUNT);
         String result = new Gson().toJson(results);
         return result;
