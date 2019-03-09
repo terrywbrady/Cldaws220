@@ -1,6 +1,8 @@
 package edu.uw.cldaws;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
@@ -59,11 +61,18 @@ public class WordCount {
    
     public LambdaResponse checkUrl(String url) throws IOException {
         if (url == null) {
-            return returnJsonMessage(500, "'url' parameter must be provided");
+            return returnJsonMessage(500, "INPUT_ERR: 'url' parameter must be provided");
         }
         if (url.isEmpty()) {
-            return returnJsonMessage(500, "'url' parameter must be provided");
+            return returnJsonMessage(500, "INPUT_ERR: 'url' parameter cannot be empty");
         }
+        
+        try {
+            URL urlobj = new URL(url);
+        } catch (MalformedURLException e) {
+            return returnJsonMessage(500, "INVALID_URL: 'url' parameter cannot be empty");
+        }
+        
         String result = wcCache.checkCacheVal(url);
         
         if (result == null) {
@@ -155,6 +164,7 @@ public class WordCount {
     }
     
     public static LambdaResponse returnJsonMessage(int status, Object s) {
+        System.err.println(String.format("%3d %s", status, s));
         LambdaResponse r = new LambdaResponse(status, s);
         return r;
     }
