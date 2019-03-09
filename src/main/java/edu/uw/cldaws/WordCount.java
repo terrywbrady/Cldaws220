@@ -1,6 +1,8 @@
 package edu.uw.cldaws;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
@@ -12,6 +14,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -23,6 +26,17 @@ import java.util.concurrent.TimeUnit;
 
 public class WordCount {
 
+    public enum ReturnType {
+        SUCCESS(200),
+        INVALID_URL(500),
+        INVALID_INPUT(500),
+        BAD_RESULT(500);
+        
+        int status;
+        ReturnType(int status) {
+            this.status = status;
+        }
+    }
     private WordCountParser wcParser = new WordCountParser();
     private WordCountCache wcCache = new WordCountCache();
     private WordCountQueue wcQueue = new WordCountQueue();
@@ -31,7 +45,7 @@ public class WordCount {
         //WordCount wc = new WordCount();
         long start = new Date().getTime();
         long lastReport = new Date().getTime();
-        System.out.println(returnJsonMessage(200,"foo"));
+        System.out.println(returnJsonMessage(ReturnType.SUCCESS,"foo"));
     }
     
     public LambdaResponse myWebHandler(LinkedHashMap map, Context context) throws IOException {
@@ -59,23 +73,35 @@ public class WordCount {
    
     public LambdaResponse checkUrl(String url) throws IOException {
         if (url == null) {
-            return returnJsonMessage(500, "'url' parameter must be provided");
+            return returnJsonMessage(ReturnType.INVALID_INPUT, "'url' parameter must be provided");
         }
         if (url.isEmpty()) {
-            return returnJsonMessage(500, "'url' parameter must be provided");
+            return returnJsonMessage(ReturnType.INVALID_INPUT, "'url' parameter cannot be empty");
         }
+        
+        try {
+            URL urlobj = new URL(url);
+        } catch (MalformedURLException e) {
+            return returnJsonMessage(ReturnType.INVALID_URL, e.getMessage());
+        }
+        
         String result = wcCache.checkCacheVal(url);
         
         if (result == null) {
             if (wcQueue.queueRequest(url)) {
-                return returnJsonMessage(200, "Not in cache. Request queued. Try again later.");
+                return returnJsonMessage(ReturnType.SUCCESS, "Not in cache. Request queued. Try again later.");
             } else {
-                return returnJsonMessage(200, "Not in cache. Request could not be queued.");
+                return returnJsonMessage(ReturnType.SUCCESS, "Not in cache. Request could not be queued.");
             }
         }
         JsonParser parser = new JsonParser();
-        JsonArray o = parser.parse(result).getAsJsonArray();
-        return returnJsonMessage(200, o);
+        System.out.println(result);
+        try {
+            JsonArray o = parser.parse(result).getAsJsonArray();
+            return returnJsonMessage(ReturnType.SUCCESS, o);
+        } catch (Exception e) {
+            return returnJsonMessage(ReturnType.BAD_RESULT, result);
+        }
     }
 
     public long reportStatus(long start, long lastReport) {
@@ -118,8 +144,12 @@ public class WordCount {
             String result = wcCache.checkCacheVal(url);
             if (result == null) {
                 System.out.println("Processing " + url);
-                result = wcParser.getCountAsJson(url);
-                wcCache.putCacheVal(url, result);
+                try {
+                    result = wcParser.getCountAsJson(url);
+                    wcCache.putCacheVal(url, result);
+                } catch (Exception e) {
+                    System.out.println("INVALID_URL: " + e.getMessage());
+                }
             } else {
                 System.out.println("Already processed" + url);
             }
@@ -154,8 +184,11 @@ public class WordCount {
         }
     }
     
-    public static LambdaResponse returnJsonMessage(int status, Object s) {
-        LambdaResponse r = new LambdaResponse(status, s);
-        return r;
+    public static LambdaResponse returnJsonMessage(ReturnType rt, Object s) {
+        if (rt == ReturnType.SUCCESS) {
+            return new LambdaResponse(rt.status, s);
+        } else {
+            return new LambdaResponse(rt.status, String.format("%s: %s", rt.name(), s));
+        }
     }
 }
